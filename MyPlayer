@@ -1,0 +1,53 @@
+#include "Player.hh"
+
+
+/**
+ * Write the name of your player and save this file
+ * with the same name and .cc extension.
+ */
+#define PLAYER_NAME Null
+
+
+struct PLAYER_NAME : public Player {
+
+  /**
+   * Factory: returns a new instance of this class.
+   * Do not modify this function.
+   */
+  static Player* factory () {
+    return new PLAYER_NAME;
+  }
+
+  /**
+   * Types and attributes for your player can be defined here.
+   */
+
+  /**
+   * Play method, invoked once per each round.
+   */
+  virtual void play () {
+      vector<int> my_workers = workers(me());
+      vector<int> my_soldiers = soldiers(me());
+      vector<int> my_queens = queens(me());
+      
+      for(int i = 0; i < my_workers.size(); ++i) {
+        int worker_id = my_workers[i];
+        Ant worker = ant(worker_id);
+        Pos p = worker.pos();
+        Cell c = cell(p);
+        if (c.bonus != None and worker.bonus == None) take(worker_id);
+        else if(c.bonus != None and worker.bonus == None) {
+            // mirar cantidad de cada alimento para comprobar si vale la pena o no coger este alimento
+            
+        }
+        else if()
+    }
+  }
+
+};
+
+
+/**
+ * Do not modify the following line.
+ */
+RegisterPlayer(PLAYER_NAME);
