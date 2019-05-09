@@ -1,5 +1,5 @@
 #include "Player.hh"
-
+#include <vector>
 
 /**
  * Write the name of your player and save this file
@@ -21,8 +21,6 @@ struct PLAYER_NAME : public Player {
   /**
    * Types and attributes for your player can be defined here.
    */
-  
-    vector<int> nutrients(3,0); // ordenados como en NutrientType
     
   /**
    * Play method, invoked once per each round.
@@ -32,42 +30,59 @@ struct PLAYER_NAME : public Player {
     vector<int> my_soldiers = soldiers(me());
     vector<int> my_queens = queens(me());
     
-    for(int i = 0; i < my_workers.size(); ++i) {
+    for(unsigned int i = 0; i < my_workers.size(); ++i) {
         int worker_id = my_workers[i];
         Ant worker = ant(worker_id);
-        Pos p = worker.pos();
+        Pos p = worker.pos;
         Cell c = cell(p);
         if (c.bonus != None and worker.bonus == None) take(worker_id);
         else {
-            if (worker.bonus != None) {
+            if (worker.bonus != None) { //si el trabajador ya lleva bonus
                 Pos u = p + Up;
                 Pos d = p + Down;
                 Pos l = p + Left;
                 Pos r = p + Right;
                 int id_queen = my_queens[0];
                 if (cell(u).type == id_queen or cell(d).type == id_queen or cell(l).type == id_queen or cell(r).type == id_queen)
-                    leave(worker_id);
-                else // moverse en direccion a la reina
+                    leave(worker_id); // dejar el alimento cerca de la reina
+                else { // moverse en direccion a la reina
+                    Ant queen = ant(id_queen);
+                    Pos q = queen.pos;
+                    if (p < q) {
+                        if (cell(r).id == -1 and cell(r).type != Water) move(worker_id,Right);
+                        else if (cell(d).id == -1 and cell(d).type != Water) move(worker_id,Down);
+                        
+                    }
+                    else {
+                        if (cell(l).id == -1 and cell(l).type != Water) move(worker_id,Left);
+                        else if (cell(u).id == -1 and cell(u).type != Water) move(worker_id,Up);
+                        
+                    }
+                }
+            }
+            else { //si el trabajador no lleva bonus
+                
+                
             }
             
         }
     }
     
-    for(int i = 0; i < my_soldiers.size(); ++i) {
+    for(unsigned int i = 0; i < my_soldiers.size(); ++i) {
         int soldier_id = my_soldiers[i];
         Ant soldier = ant(soldier_id);
-        Pos p = soldier.pos();
+        Pos p = soldier.pos;
         Cell c = cell(p);
         Pos u = p + Up; // miro po encima
         Cell uc = cell(u);
         Pos d = p + Down;
         Pos l = p + Left;
         Pos r = p + Right;
-        if (pos_ok(u) and uc.type != Water and uc.id != -1) move(worker_id,Up);
-        else if (pos_ok(d) and cell(d).type != Water and cell(d).id != -1) move(worker_id,Down);
-        else if (pos_ok(l) and cell(l).type != Water and cell(l).id != -1) move(worker_id,Left);
-        else if (pos_ok(r) and cell(r).type != Water and cell(r).id != -1) move(worker_id,Right); // modo agressive
-        
+        if (pos_ok(u) and uc.type != Water and uc.id != -1) move(soldier_id,Up);
+        else if (pos_ok(d) and cell(d).type != Water and cell(d).id != -1) move(soldier_id,Down);
+        else if (pos_ok(l) and cell(l).type != Water and cell(l).id != -1) move(soldier_id,Left);
+        else if (pos_ok(r) and cell(r).type != Water and cell(r).id != -1) move(soldier_id,Right); // modo agressive
+        else if (c.bonus != None and cell(u).type != Water) move(soldier_id,Up); // mover (arriba) si está ocupando una casilla con alimento
     }
   }
 
