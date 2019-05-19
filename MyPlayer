@@ -1,5 +1,6 @@
 #include "Player.hh"
 #include <vector>
+#include <set>
 
 /**
  * Write the name of your player and save this file
@@ -32,8 +33,14 @@ struct PLAYER_NAME : public Player {
     
     const int MAX_DIST = 30;
     const int N = 25;
-    
-    int la_pelea_remix (Pos inici, Pos& obj, MB& explorat, MP& path, MI& dist, MB& crash, const VI& workers, const VI& soldiers, const VI& queens) {
+    const int QUEEN_PERIOD = 2;
+    MB crash = MB(N,VB(N,false)); // para comprobar casillas ocupadas
+
+    const vector<int> BREAD = {2,0,1};
+    const vector<int> SEED = {0,1,2};
+    const vector<int> LEAF = {1,2,0};
+
+    int la_pelea_remix (Pos inici, Pos& obj, MB& explorat, MP& path, MI& dist, MB& crash, set<int> my_ids) {
         queue<Pos> cua;
         cua.push(inici);
         while (not cua.empty()){
@@ -42,16 +49,16 @@ struct PLAYER_NAME : public Player {
             int i = actu.i; 
             int j = actu.j;
             explorat[i][j] = true; //marco como visitada esta pos
-            if(cell(actu).id != -1 and not ally(actu,workers,soldiers,queens)) { // si encuentro un enemigo
+            if(cell(actu).id != -1 and not ally(actu,my_ids)) { // si encuentro un enemigo
                 obj = actu;
                 return dist[i][j];
             }
-            for (int k = 0; k < 4; ++k) insert_adj (actu+Dir(k), cua, actu, explorat, path, dist, crash, true); //añado las adyacentes a la queue
+            for (int k = 0; k < 4; ++k) insert_adj (actu+Dir(k), cua, actu, explorat, path, dist, crash, true, my_ids, false); //añado las adyacentes a la queue
         }
         return -1;
     }
 
-    int find_food (Pos inici, Pos& obj, MB& explorat, MP& path, MI& dist, MB& crash, bool s_queen, int id_queen) {
+    int find_food (Pos inici, Pos& obj, MB& explorat, MP& path, MI& dist, MB& crash, bool sq, int id_queen, set<int> my_ids) {
         queue<Pos> cua;
         cua.push(inici);
         while (not cua.empty()){
@@ -60,7 +67,7 @@ struct PLAYER_NAME : public Player {
             int i = actu.i; 
             int j = actu.j;
             explorat[i][j] = true; //marco como visitada esta pos
-            if(not s_queen) {
+            if(not sq) {
                 if (cell(actu).bonus != None) {
                     obj = actu;
                     return dist[i][j];
@@ -72,32 +79,45 @@ struct PLAYER_NAME : public Player {
                     return dist[i][j];
                 }
             }
-            for (int k = 0; k < 4; ++k) insert_adj (actu+Dir(k), cua, actu, explorat, path, dist, crash, false); //añado las adyacentes a la queue
+            for (int k = 0; k < 4; ++k) insert_adj (actu+Dir(k), cua, actu, explorat, path, dist, crash, false, my_ids, sq); //añado las adyacentes a la queue
         }
         return -1;
     }
 
-    void insert_adj (Pos found_pos, queue<Pos>& cua, Pos pre, MB& explorat, MP& path, MI& dist, MB& crash, bool aggressive) {
+    void insert_adj (Pos found_pos, queue<Pos>& cua, Pos pre, MB& explorat, MP& path, MI& dist, MB& crash, bool aggressive, set<int> my_ids, bool sq) {
         if (not pos_ok(found_pos)) return;
         int i = found_pos.i;
         int j = found_pos.j;
         bool enemy = false;
-        
-        if (cell(found_pos).id != -1) enemy = true; // miro si hay una hormiga en esa casilla
+ 
+        if (cell(found_pos).id != -1 and not ally(found_pos,my_ids)) enemy = true; // miro si hay una hormiga en esa casilla
         
         if (not aggressive) { // workers
-            if (not explorat[i][j] and cell(found_pos).type != Water and cell(found_pos).id == -1 and not enemy and not crash[i][j]) {
-                explorat[i][j] = true;
-                dist[i][j] = dist[pre.i][pre.j] + 1;
-                path[i][j] = pre;
-                Pos posicio;
-                posicio.i = i;
-                posicio.j = j;
-                cua.push(posicio);
-            }
+			if (not sq) {
+				if (not explorat[i][j] and cell(found_pos).type != Water and cell(found_pos).id == -1 and not enemy and not crash[i][j]) { // busco comida
+					explorat[i][j] = true;
+					dist[i][j] = dist[pre.i][pre.j] + 1;
+					path[i][j] = pre;
+					Pos posicio;
+					posicio.i = i;
+					posicio.j = j;
+					cua.push(posicio);
+				}
+			}
+			else {
+				if (not explorat[i][j] and cell(found_pos).type != Water and not enemy) { // busco reina
+					explorat[i][j] = true;
+					dist[i][j] = dist[pre.i][pre.j] + 1;
+					path[i][j] = pre;
+					Pos posicio;
+					posicio.i = i;
+					posicio.j = j;
+					cua.push(posicio);
+				}
+			}
         }
         else { // soldiers
-            if (not explorat[i][j] and cell(found_pos).type != Water) {
+            if (not explorat[i][j] and cell(found_pos).type != Water and not ally(found_pos,my_ids) and not enemy_queen(found_pos)) {
                 explorat[i][j] = true;
                 dist[i][j] = dist[pre.i][pre.j] + 1;
                 path[i][j] = pre;
@@ -109,14 +129,60 @@ struct PLAYER_NAME : public Player {
         }
     }
     
-    bool ally (Pos p, const VI& workers, const VI& soldiers, const VI& queens) {
+    int find_food_queen (Pos inici, Pos& obj, MB& explorat, MP& path, MI& dist, MB& crash) {
+        queue<Pos> cua;
+        cua.push(inici);
+        while (not cua.empty()){
+            Pos actu = cua.front(); 
+            cua.pop();
+            int i = actu.i; 
+            int j = actu.j;
+            explorat[i][j] = true; //marco como visitada esta pos
+            if (cell(actu).bonus != None) {
+                obj = actu;
+                return dist[i][j];
+            }
+            for (int k = 0; k < 4; ++k) insert_adj_queen(actu+Dir(k), cua, actu, explorat, path, dist, crash); //añado las adyacentes a la queue
+        }
+        return -1;
+    }
+
+    void insert_adj_queen (Pos found_pos, queue<Pos>& cua, Pos pre, MB& explorat, MP& path, MI& dist, MB& crash) {
+        if (not pos_ok(found_pos)) return;
+        int i = found_pos.i;
+        int j = found_pos.j;
+
+        if (not explorat[i][j] and cell(found_pos).type != Water and cell(found_pos).id == -1) {
+            explorat[i][j] = true;
+			dist[i][j] = dist[pre.i][pre.j] + 1;
+			path[i][j] = pre;
+			Pos posicio;
+			posicio.i = i;
+			posicio.j = j;
+			cua.push(posicio);
+        }
+    }
+
+    bool ally (Pos p, set<int>& my_ids) {
         int id = cell(p).id;
-        for (unsigned int i=0; i<workers.size(); ++i) if (workers[i] == id) return true; 
-        for (unsigned int j=0; j<soldiers.size(); ++j) if (soldiers[j] == id) return true; 
-        for (unsigned int k=0; k<queens.size(); ++k) if (queens[k] == id) return true; 
-        return false;
+        if (my_ids.find(id) != my_ids.end()) return true;
+		else return false;
     }  
     
+    bool enemy_queen(Pos p) {
+        int idq = cell(p).id;
+        set<int> enemies;
+        for (int i=0; i<4; ++i) enemies.insert(queens(i)[0]);
+        if (enemies.find(idq) != enemies.end()) return true;
+        else return false;
+    }
+
+    bool my_queen(Pos p) {
+        int idq = cell(p).id;
+        if (idq == queens(me())[0]) return true;
+        else return false;
+    }
+
   /**
    * Play method, invoked once per each round.
    */
@@ -125,155 +191,152 @@ virtual void play () {
     VI my_workers = workers(me());
     VI my_soldiers = soldiers(me());
     VI my_queens = queens(me());
-    MB G_crash = MB(N,VB(N,false));
-    
-    for(unsigned int i = 0; i < my_workers.size(); ++i) { // command workers
-        
-        MI G_dist = MI(N,VI(N,0));  
-        MB G_visit = MB(N,VB(N,false));
-        MP G_path = MP(N,VP(N));
-        
-        int id_queen = my_queens[0];
-        int worker_id = my_workers[i];
-        Ant worker = ant(worker_id);
-        Pos p = worker.pos;
-        Cell c = cell(p);
-        G_crash[p.i][p.j] = true; // que nadie se mueva hacia el
+	set<int> my_ids;
+	for(unsigned int i = 0; i < my_workers.size(); ++i) my_ids.insert(my_workers[i]);
+    for(unsigned int i = 0; i < my_soldiers.size(); ++i) my_ids.insert(my_soldiers[i]);
+    int idq = queens(me())[0];
 
-        if (c.bonus != None and worker.bonus == None) take(worker_id);
-        else {
-            if (worker.bonus != None) { //si el trabajador ya lleva bonus
-                Pos u = p + Up;
-                Pos d = p + Down;
-                Pos l = p + Left;
-                Pos r = p + Right;
-                
-                if (cell(u).type == id_queen or cell(d).type == id_queen or cell(l).type == id_queen or cell(r).type == id_queen)
-                    leave(worker_id); // dejar el alimento cerca de la reina
-                else { // moverse en direccion a la reina
-                    bool s_queen = true;
-                    Pos obj;
-                    int distance = find_food(p,obj,G_visit,G_path,G_dist,G_crash,s_queen,id_queen);
-                    if (distance < MAX_DIST) {
-                        while(G_dist[obj.i][obj.j] > 1) obj = G_path[obj.i][obj.j];
-                        for(int i=0; i<4; ++i) {
-                            if (p+Dir(i) == obj) {
-                                G_crash[obj.i][obj.j] = true;
-                                move(worker_id, Dir(i));
+
+    for (unsigned int i = 0; i < my_queens.size(); ++i) { // command queen
+        MI dist = MI(N,VI(N,0));  
+        MB visit = MB(N,VB(N,false));
+        MP path = MP(N,VP(N));
+
+        int queen_id = my_queens[i];
+		my_ids.insert(queen_id);
+
+        Ant queen = ant(queen_id);
+        Pos p = queen.pos;
+
+        if(round()%QUEEN_PERIOD == 0) { // miro si en este turno la reina puede jugar
+
+            if (queen.reserve[Carbohydrate]>=soldier_carbo() and queen.reserve[Lipid]>=soldier_lipid() and queen.reserve[Protein]>=soldier_prote()) {
+                for(int k=0;k<4;++k) {
+                    Pos aux = p+Dir(k);
+                    Cell caux = cell(aux);
+                    if(caux.id == -1 and caux.type != Water) lay(queen_id,Dir(k),Soldier);
+                }
+            }
+            else if (queen.reserve[0]>=worker_carbo() and queen.reserve[1]>=worker_lipid() and queen.reserve[2]>=worker_prote()) {
+                for(int k=0;k<4;++k) {
+                    Pos aux = p+Dir(k);
+                    Cell caux = cell(aux);
+                    if(caux.id == -1 and caux.type != Water) lay(queen_id,Dir(k),Worker);
+                }    
+            }
+            else {
+                Pos obj;
+                bool sq = false;
+                int distance = find_food_queen(p,obj,visit,path,dist,crash);
+                if(distance < 3) {
+                    while(dist[obj.i][obj.j] > 1) obj = path[obj.i][obj.j];
+                    for(int i=0; i<4; ++i) {
+                        if (p+Dir(i) == obj) {
+                            if (cell(obj).id == -1) {
+                                move(queen_id, Dir(i));
                             }
                         }
                     }
                 }
             }
-            else { //si el trabajador no lleva bonus
-                Pos obj;
-                bool s_queen = false;
-                int distance = find_food(p,obj,G_visit,G_path,G_dist,G_crash,s_queen,id_queen);
-                if(distance < MAX_DIST) {
-                    while(G_dist[obj.i][obj.j] > 1) obj = G_path[obj.i][obj.j];
-                    for(int i=0; i<4; ++i) {
-                        if (p+Dir(i) == obj) {
-                            G_crash[obj.i][obj.j] = true;
-                            move(worker_id, Dir(i));
-                        }
+        }
+    }
+
+    for(unsigned int i = 0; i < my_workers.size(); ++i) { // command workers
+        
+        MI dist = MI(N,VI(N,0));  
+        MB visit = MB(N,VB(N,false));
+        MP path = MP(N,VP(N));
+        
+        int worker_id = my_workers[i];
+        Ant worker = ant(worker_id);
+        Pos p = worker.pos;
+        Cell c = cell(p);
+
+        if (worker.bonus != None) { //si el trabajador ya lleva bonus
+            bool sq = true; //va a buscar a la reina
+            Pos obj;
+            int distance = find_food(p,obj,visit,path,dist,crash,sq,idq,my_ids);
+            while(dist[obj.i][obj.j] > 1) obj = path[obj.i][obj.j];
+            for(int k=0; k<4; ++k) {
+                if (p+Dir(k) == obj) {
+                    if (crash[obj.i][obj.j] == false and not my_queen(obj)) {
+                        crash[obj.i][obj.j] = true; // miro si puedo moverme y entonces marco la casilla
+                        move(worker_id, Dir(k));
+						crash[p.i][p.j] = false; // si me he movido, desmarco anterior casilla
+					}
+					else if (my_queen(obj)) {
+						leave(worker_id);
+                        crash[p.i][p.j] = true; // si me he quedado quieto marco esa casilla como ocupada
+					}
+                }
+            }
+        }
+        else if (worker.bonus == None and c.bonus == None) { //si el trabajador no lleva bonus
+            Pos obj;
+            bool sq = false;
+            int distance = find_food(p,obj,visit,path,dist,crash,sq,idq,my_ids);
+            if(distance < MAX_DIST) {
+                while(dist[obj.i][obj.j] > 1) obj = path[obj.i][obj.j];
+                for(int i=0; i<4; ++i) {
+                    if (p+Dir(i) == obj) {
+                        if (crash[obj.i][obj.j] == false) {
+							crash[obj.i][obj.j] = true; // miro si puedo moverme y entonces marco la casilla
+                           	move(worker_id, Dir(i));
+							crash[p.i][p.j] = false; // si me he movido, desmarco anterior casilla
+						}
                     }
                 }
             }
-            
         }
+        else if (worker.bonus == None and c.bonus != None) { // si hay un bonus donde estoy
+			Pos obj;
+			bool sq = true;
+			int distance = find_food(p,obj,visit,path,dist,crash,sq,idq,my_ids);
+			if (distance < 3) { // miro si estoy cerca de la reina
+			    for(int i=0; i<4; ++i) {
+                    Pos aux = p+Dir(i);
+                    Cell caux = cell(aux);
+                    if (pos_ok(aux) and caux.id == -1 and not crash[aux.i][aux.j]) {
+                        crash[aux.i][aux.j] = true; // miro si puedo moverme y entonces marco la casilla
+                        move(worker_id,Dir(i));
+                        //crash[p.i][p.j] = false; // si me he movido, desmarco anterior casilla
+                    }
+                }	
+			} 
+			else {
+                crash[p.i][p.j] = true; // si me he quedado quieto marco esa casilla como ocupada
+                take(worker_id);
+            }
+		}    
     }
     
     for (unsigned int i = 0; i < my_soldiers.size(); ++i) { // command soldiers
         
-        MI G_dist = MI(N,VI(N,0));  
-        MB G_visit = MB(N,VB(N,false));
-        MP G_path = MP(N,VP(N));
+        MI dist = MI(N,VI(N,0));  
+        MB visit = MB(N,VB(N,false));
+        MP path = MP(N,VP(N));
         
         int soldier_id = my_soldiers[i];
         Ant soldier = ant(soldier_id);
         Pos p = soldier.pos;
-        Cell c = cell(p);
 
         Pos obj;
-        int dist = la_pelea_remix(p,obj,G_visit,G_path,G_dist,G_crash,my_workers,my_soldiers,my_queens);
-        if(dist < MAX_DIST) {
-            while(G_dist[obj.i][obj.j] > 1) obj = G_path[obj.i][obj.j];
+        int distance = la_pelea_remix(p,obj,visit,path,dist,crash,my_ids);
+        if(distance < MAX_DIST) {
+            while(dist[obj.i][obj.j] > 1) obj = path[obj.i][obj.j];
             for(int i=0; i<4; ++i) {
                 if (p+Dir(i) == obj) {
-                    G_crash[obj.i][obj.j] = true;
-                    move(soldier_id, Dir(i));
+                    if (crash[obj.i][obj.j] == false and not enemy_queen(obj)) {
+						crash[obj.i][obj.j] = true; // miro si puedo moverme y entonces marco la casilla
+						move(soldier_id, Dir(i));
+						crash[p.i][p.j] = false; // si me he movido, desmarco anterior casilla
+					}
                 }
             }
         }
     }
-
-    for (unsigned int i = 0; i < my_queens.size(); ++i) {
-        MI G_dist = MI(N,VI(N,0));  
-        MB G_visit = MB(N,VB(N,false));
-        MP G_path = MP(N,VP(N));
-
-        int queen_id = my_queens[i];
-        Ant queen = ant(queen_id);
-        Pos p = queen.pos;
-        Cell c = cell(p);
-
-        Pos obj;
-        
-    }
 }
-
-
-// int find_food (Pos inici, Pos& worker, MB& explorat, MI& path, MI& dist, bool water){
-//     queue<Pos> cua;
-//     cua.push(inici);
-//     while (not cua.empty()){
-//         Pos actu = cua.front(); 
-//         cua.pop();
-//         int i = actu.i; 
-//         int j = actu.j;
-//         if (water){
-//             if(cell(actu).type == Water){
-//                 worker = actu;
-//                 return dist[i][j];
-//             }
-//         }
-//         else {
-//             if (cell(actu).type == City and cell(actu).owner != me()){
-//                 worker = actu;
-//                 return dist[i][j];
-//             }
-//         }
-//         for (int k = 0; k < 8; ++k) insereix_w(actu+Dir(k),cua,actu,explorat,path,dist);
-//     }
-//     return -1;    
-// }
-// 
-// 
-// void insereix_w(Pos found_pos, queue<Pos>& cua, Pos precedent, MB& explorat, MP& path, ME& dist){
-//     if (not is_valid(found_pos)) return;
-//     int i = found_pos.i;
-//     int j = found_pos.j;
-//     bool car = false;
-//     
-//     if (cell(found_pos).id != -1){
-//         int potential_enemy = cell(found_pos).id;
-//         if (unit(potential_enemy).type == Car) car = true;
-//     }
-//     if (not explorat[i][j] and cell(found_pos).type != Wall 
-//         and cell(found_pos).id == -1 and not car){
-//         explorat[i][j] = true;
-//         dist[i][j] = dist[precedent.i][precedent.j] + 1;
-//         path[i][j] = precedent;
-//         Pos posicio;
-//         posicio.i = i; posicio.j = j;
-//         cua.push(posicio);
-//     }
-// }
-
-
-
-
-  
 
 };
 
