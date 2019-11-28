@@ -1,0 +1,157 @@
+#include "Player.hh"
+
+
+/**
+ * Write the name of your player and save this file
+ * with the same name and .cc extension.
+ */
+#define PLAYER_NAME Gloin
+
+
+struct PLAYER_NAME : public Player {
+
+  /**
+   * Factory: returns a new instance of this class.
+   * Do not modify this function.
+   */
+  static Player* factory () {
+    return new PLAYER_NAME;
+  }
+
+  /**
+   * Types and attributes for your player can be defined here.
+   */
+  typedef vector<int> VI;
+  typedef vector<VI> MI;
+
+  typedef vector<bool> VB;
+  typedef vector<VB> MB;
+        
+  typedef vector<Pos> VP;
+  typedef vector<VP> MP;
+  
+  const int N = 60;
+  MB crash = MB(N,VB(N,false));
+  
+  void move_dwarves() {
+    vector<int> D = dwarves(me());
+    for (unsigned int i=0; i<D.size(); ++i) {
+      MI dist = MI(N,VI(N,0));  
+      MB visit = MB(N,VB(N,false));
+      MP path = MP(N,VP(N));
+      
+      int dni = D[i];
+      Unit enano = unit(dni);
+      Pos p = enano.pos;
+      Pos obj;
+      int distancia;
+      if (round() >= 100) // las ultimas 100 rondas las dedico a buscar tesoros
+        distancia = somos_de_oro(p, obj, visit, path, dist, crash); // busco tesoros
+      else distancia = freeanuel(p, obj, visit, path, dist, crash); // busco enemigos
+      while (not adyacente_gringo(obj,p)) obj = path[obj.i][obj.j];
+      for (int k=0; k<8; ++k) {
+        if (p+Dir(k) == obj) command(dni,Dir(k)); // envio al enano hacia el tesoro
+      }
+    }
+  }
+  
+  void move_wizards() {
+  }
+  
+  int somos_de_oro(Pos inicio, Pos& obj, MB& explorado, MP& path, MI& dist, MB& crash) {
+    queue<Pos> cola;
+    cola.push(inicio);
+    while (not cola.empty()) {
+      Pos actu = cola.front();
+      cola.pop();
+      int i = actu.i;
+      int j = actu.j;
+      explorado[i][j] = true; // marco la posicion visitada
+      if (cell(actu).treasure) { // si he encontrado un tesoro acabo
+        obj = actu;
+        return dist[i][j];
+      }
+      for (int k=0; k<8; ++k) insert_adj(actu+Dir(k), cola, actu, explorado, path, dist, crash, false); // añado adyacentes
+    }
+    return -1;
+  }
+  
+  int freeanuel(Pos inicio, Pos& obj, MB& explorado, MP& path, MI& dist, MB& crash) {
+    queue<Pos> cola;
+    cola.push(inicio);
+    while (not cola.empty()) {
+      Pos actu = cola.front();
+      cola.pop();
+      int i = actu.i;
+      int j = actu.j;
+      explorado[i][j] = true; // marco la posicion visitada
+      if (find_enemy(actu)) { // si he encontrado un enemigo acabo
+        obj = actu;
+        return dist[i][j];
+      }
+      for (int k=0; k<8; ++k) insert_adj(actu+Dir(k), cola, actu, explorado, path, dist, crash, true); // añado adyacentes
+    }
+    return -1;
+  }
+  
+  void insert_adj(Pos pos, queue<Pos>& cola, Pos pre, MB& explorado, MP& path, MI& dist, MB& crash, bool pelea) {
+    if(not pos_ok(pos)) return;
+    int i = pos.i;
+    int j = pos.j;
+    bool enemy = false;
+    if (not pelea) { // si busco tesoros...
+      if (not explorado[i][j] and crash[i][j] == false and not find_enemy(pos) and ciclable(pos)) {
+        cola.push(pos);
+        explorado[i][j] = true;
+        dist[i][j] = dist[pre.i][pre.j] + 1;
+        path[i][j] = pre;
+        cola.push(pos);
+      }
+    }
+    else { // si busco enemigos ...
+      if (not explorado[i][j] and crash[i][j] == false and ciclable(pos)) {
+        cola.push(pos);
+        explorado[i][j] = true;
+        dist[i][j] = dist[pre.i][pre.j] + 1;
+        path[i][j] = pre;
+        cola.push(pos);
+      }
+    }
+  }
+  
+  bool find_enemy(Pos p) {
+    if (cell(p).owner != me() and cell(p).id != -1) return true;
+    else return false;
+  }
+  
+  bool ciclable(Pos p) {
+    if (cell(p).type == Granite or cell(p).type == Abyss) return false;
+    return true;
+  }
+  
+  bool adyacente_gringo(Pos p1, Pos p2) { 
+    for (int k=0; k<8; ++k) {
+      if (p1+Dir(k) == p2) return true;
+    }
+    return false;
+  }
+  
+  void reset_mapa() {
+    crash = MB(N,VB(N,false));
+  }
+  /**
+   * Play method, invoked once per each round.
+   */
+  virtual void play () {
+    reset_mapa();
+    move_dwarves();
+    move_wizards();
+  }
+
+};
+
+
+/**
+ * Do not modify the following line.
+ */
+RegisterPlayer(PLAYER_NAME);
