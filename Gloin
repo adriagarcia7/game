@@ -33,47 +33,101 @@ struct PLAYER_NAME : public Player {
   const int N = 60;
   MB crash = MB(N,VB(N,false));
   
+  bool find_enemy(Pos p) {
+    if (cell(p).id != -1 and unit(cell(p).id).player != me()) return true;
+    for (int i=0; i<8; ++i) {
+        if (pos_ok(p+Dir(i))) {
+            Cell k = cell(p+Dir(i));
+            if (k.id != -1 and unit(k.id).player != me()) return true;
+        }
+    }
+    return false;
+  }
+  
+  bool ciclable(Pos p) {
+    if (cell(p).type == Granite or cell(p).type == Abyss or cell(p).type == Rock) return false;
+    return true;
+  }
+  
+  bool adyacente_gringo(Pos p1, Pos p2) { 
+    for (int k=0; k<8; ++k) {
+      if (p1+Dir(k) == p2) return true;
+    }
+    return false;
+  }
+  
+  bool adyacente_wizard(Pos p1, Pos p2) { 
+    for (int k=0; k<4; ++k) {
+      if (p1+Dir(2*k) == p2) return true;
+    }
+    return false;
+  }
+  
+  void reset_mapa() {
+    crash = MB(N,VB(N,false));
+  }
+  
   void move_dwarves() {
     vector<int> D = dwarves(me());
     for (unsigned int i=0; i<D.size(); ++i) {
       MI dist = MI(N,VI(N,0));  
       MB visit = MB(N,VB(N,false));
       MP path = MP(N,VP(N));
-      
       int dni = D[i];
+      bool gula = dni%2;
       Unit enano = unit(dni);
       Pos p = enano.pos;
       Pos obj;
-      int distancia;
-      if (round() >= 100) // las ultimas 100 rondas las dedico a buscar tesoros
-        distancia = somos_de_oro(p, obj, visit, path, dist, crash); // busco tesoros
-      else distancia = freeanuel(p, obj, visit, path, dist, crash); // busco enemigos
-      while (not adyacente_gringo(obj,p)) obj = path[obj.i][obj.j];
+      bool redi = false;
       for (int k=0; k<8; ++k) {
-        if (p+Dir(k) == obj) command(dni,Dir(k)); // envio al enano hacia el tesoro
+        if (pos_ok(p+Dir(k)) and cell(p+Dir(k)).id != -1 and unit(cell(p+Dir(k)).id).type == Wizard and unit(cell(p+Dir(k)).id).player != me()) {
+            command(dni,Dir(k)); // envio al enano hacia el tesoro
+            redi = true;
+        }
       }
+        for (int k=0; k<8; ++k) {
+        if (pos_ok(p+Dir(k)) and cell(p+Dir(k)).id != -1 and unit(cell(p+Dir(k)).id).type == Dwarf and unit(cell(p+Dir(k)).id).player != me()) {
+            command(dni,Dir(k)); // envio al enano hacia el tesoro
+            redi = true;
+        }
+      }
+      
+    if (not redi) {
+        int distancia;
+        //if (round() >= 100) // las ultimas 100 rondas las dedico a buscar tesoros
+            distancia = bufar(p, obj, visit, path, dist, crash,gula); // busco tesoros
+            if (distancia != -1) {
+        //else distancia = freeanuel(p, obj, visit, path, dist, crash); // busco enemigos
+                while (not adyacente_gringo(obj,p)) obj = path[obj.i][obj.j];
+                for (int k=0; k<8; ++k) {
+                    if (p+Dir(k) == obj and not find_enemy(obj)) command(dni,Dir(k)); // envio al enano hacia el tesoro
+                }
+            }
+    }
     }
   }
   
   void move_wizards() {
-  }
-  
-  int somos_de_oro(Pos inicio, Pos& obj, MB& explorado, MP& path, MI& dist, MB& crash) {
-    queue<Pos> cola;
-    cola.push(inicio);
-    while (not cola.empty()) {
-      Pos actu = cola.front();
-      cola.pop();
-      int i = actu.i;
-      int j = actu.j;
-      explorado[i][j] = true; // marco la posicion visitada
-      if (cell(actu).treasure) { // si he encontrado un tesoro acabo
-        obj = actu;
-        return dist[i][j];
-      }
-      for (int k=0; k<8; ++k) insert_adj(actu+Dir(k), cola, actu, explorado, path, dist, crash, false); // añado adyacentes
+    vector<int> W = wizards(me());
+    for (unsigned int i=0; i<W.size(); ++i) {
+        MI dist = MI(N,VI(N,0));  
+        MB visit = MB(N,VB(N,false));
+        MP path = MP(N,VP(N));
+        int dni = W[i];
+        Unit magisu = unit(dni);
+        Pos p = magisu.pos;
+        Pos obj;
+        if (enano_adyacente(p)) command(dni,None);
+        else {
+            int distancia = soraka(p,obj,visit,path,dist,crash);
+            if (distancia != -1) {
+                while (not adyacente_wizard(obj,p)) obj = path[obj.i][obj.j];
+                for (int k=0; k<4; ++k) {
+                    if (p+Dir(2*k) == obj){ command(dni,Dir(2*k)); cout << 2*k << endl;}// envio al enano hacia el tesoro
+                }
+            }
+        }
     }
-    return -1;
   }
   
   int freeanuel(Pos inicio, Pos& obj, MB& explorado, MP& path, MI& dist, MB& crash) {
@@ -94,13 +148,62 @@ struct PLAYER_NAME : public Player {
     return -1;
   }
   
+  int bufar(Pos inicio, Pos& obj, MB& explorado, MP& path, MI& dist, MB& crash,bool gula) {
+    queue<Pos> cola;
+    cola.push(inicio);
+    while (not cola.empty()) {
+      Pos actu = cola.front();
+      cola.pop();
+      int i = actu.i;
+      int j = actu.j;
+      explorado[i][j] = true; // marco la posicion visitada
+      if (not gula and cell(actu).owner != me() and cell(actu).id == -1 and cell(actu).type == Cave) { // si he encontrado un tesoro acabo
+        obj = actu;
+        return dist[i][j];
+      }
+       if (gula and cell(actu).treasure) { // si he encontrado un tesoro acabo
+        obj = actu;
+        return dist[i][j];
+      }
+      for (int k=0; k<8; ++k) insert_adj(actu+Dir(k), cola, actu, explorado, path, dist, crash,false); // añado adyacentes
+    }
+    return -1;
+  }
+  
+  bool enano_adyacente(Pos p) {
+      for (int k=0; k<4; ++k) {
+          if(pos_ok(p+Dir(2*k)) and cell(p+Dir(2*k)).id != -1){
+            if (unit(cell(p+Dir(2*k)).id).type == Dwarf and unit(cell(p+Dir(2*k)).id).player == me()) return true; // envio al enano hacia el tesoro
+            } 
+      }
+        return false;
+  }
+  
+  int soraka(Pos inicio, Pos& obj, MB& explorado, MP& path, MI& dist, MB& crash) {
+    queue<Pos> cola;
+    cola.push(inicio);
+    while (not cola.empty()) {
+      Pos actu = cola.front();
+      cola.pop();
+      int i = actu.i;
+      int j = actu.j;
+      explorado[i][j] = true; // marco la posicion visitada
+      if (cell(actu).id != -1 and unit(cell(actu).id).type == Dwarf and unit(cell(actu).id).player == me()) { // si he encontrado un tesoro acabo
+        obj = actu;
+        return dist[i][j];
+      }
+      for (int k=0; k<4; ++k) insert_adj(actu+Dir(2*k), cola, actu, explorado, path, dist, crash, false); // añado adyacentes
+    }
+    return -1;
+  }
+  
   void insert_adj(Pos pos, queue<Pos>& cola, Pos pre, MB& explorado, MP& path, MI& dist, MB& crash, bool pelea) {
     if(not pos_ok(pos)) return;
     int i = pos.i;
     int j = pos.j;
     bool enemy = false;
     if (not pelea) { // si busco tesoros...
-      if (not explorado[i][j] and crash[i][j] == false and not find_enemy(pos) and ciclable(pos)) {
+      if (not explorado[i][j] and crash[i][j] == false and ciclable(pos)) {
         cola.push(pos);
         explorado[i][j] = true;
         dist[i][j] = dist[pre.i][pre.j] + 1;
@@ -119,26 +222,6 @@ struct PLAYER_NAME : public Player {
     }
   }
   
-  bool find_enemy(Pos p) {
-    if (cell(p).owner != me() and cell(p).id != -1) return true;
-    else return false;
-  }
-  
-  bool ciclable(Pos p) {
-    if (cell(p).type == Granite or cell(p).type == Abyss) return false;
-    return true;
-  }
-  
-  bool adyacente_gringo(Pos p1, Pos p2) { 
-    for (int k=0; k<8; ++k) {
-      if (p1+Dir(k) == p2) return true;
-    }
-    return false;
-  }
-  
-  void reset_mapa() {
-    crash = MB(N,VB(N,false));
-  }
   /**
    * Play method, invoked once per each round.
    */
