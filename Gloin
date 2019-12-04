@@ -29,6 +29,9 @@ struct PLAYER_NAME : public Player {
         
   typedef vector<Pos> VP;
   typedef vector<VP> MP;
+
+	typedef pair<int, Pos> pes_pos;
+	typedef vector< vector<pes_pos> > Graf;
   
   const int N = 60;
   MB crash = MB(N,VB(N,false));
@@ -36,16 +39,21 @@ struct PLAYER_NAME : public Player {
   bool find_enemy(Pos p) {
     if (cell(p).id != -1 and unit(cell(p).id).player != me()) return true;
     for (int i=0; i<8; ++i) {
-        if (pos_ok(p+Dir(i))) {
-            Cell k = cell(p+Dir(i));
-            if (k.id != -1 and unit(k.id).player != me()) return true;
-        }
+      if (pos_ok(p+Dir(i))) {
+        Cell k = cell(p+Dir(i));
+        if (k.id != -1 and unit(k.id).player != me()) return true;
+      }
     }
     return false;
   }
   
   bool ciclable(Pos p) {
     if (cell(p).type == Granite or cell(p).type == Abyss or cell(p).type == Rock) return false;
+    return true;
+  }
+
+  bool minable(Pos p) {
+    if (cell(p).type == Granite or cell(p).type == Abyss) return false;
     return true;
   }
   
@@ -74,59 +82,76 @@ struct PLAYER_NAME : public Player {
       MB visit = MB(N,VB(N,false));
       MP path = MP(N,VP(N));
       int dni = D[i];
-      bool gula = dni%2;
       Unit enano = unit(dni);
       Pos p = enano.pos;
       Pos obj;
       bool redi = false;
+
       for (int k=0; k<8; ++k) {
         if (pos_ok(p+Dir(k)) and cell(p+Dir(k)).id != -1 and unit(cell(p+Dir(k)).id).type == Wizard and unit(cell(p+Dir(k)).id).player != me()) {
-            command(dni,Dir(k)); // envio al enano hacia el tesoro
-            redi = true;
+          command(dni,Dir(k)); // envio al enano hacia el mago enemigo
+          redi = true;
         }
       }
-        for (int k=0; k<8; ++k) {
-        if (pos_ok(p+Dir(k)) and cell(p+Dir(k)).id != -1 and unit(cell(p+Dir(k)).id).type == Dwarf and unit(cell(p+Dir(k)).id).player != me()) {
-            command(dni,Dir(k)); // envio al enano hacia el tesoro
-            redi = true;
-        }
-      }
-      
-    if (not redi) {
-        int distancia;
-        //if (round() >= 100) // las ultimas 100 rondas las dedico a buscar tesoros
-            distancia = bufar(p, obj, visit, path, dist, crash,gula); // busco tesoros
-            if (distancia != -1) {
-        //else distancia = freeanuel(p, obj, visit, path, dist, crash); // busco enemigos
-                while (not adyacente_gringo(obj,p)) obj = path[obj.i][obj.j];
-                for (int k=0; k<8; ++k) {
-                    if (p+Dir(k) == obj and not find_enemy(obj)) command(dni,Dir(k)); // envio al enano hacia el tesoro
-                }
+			if (not redi) {
+				for (int k=0; k<8; ++k) {
+					if (pos_ok(p+Dir(k)) and cell(p+Dir(k)).id != -1 and unit(cell(p+Dir(k)).id).type == Dwarf and unit(cell(p+Dir(k)).id).player != me()) {
+						command(dni,Dir(k)); // envio al enano hacia el enano enemigo
+						redi = true;
+					}
+				}
+			}
+			if (not redi) {
+				for (int k=0; k<8; ++k) {
+					if (pos_ok(p+Dir(k)) and cell(p+Dir(k)).id != -1 and unit(cell(p+Dir(k)).id).type == Orc and unit(cell(p+Dir(k)).id).player != me()) {
+						command(dni,Dir(k)); // envio al enano hacia el orco
+						redi = true;
+					}
+				}
+			}
+			if (not redi and round() < 120) {
+				int distancia;
+				distancia = bufar(p, obj, visit, path, dist, crash); // busco tesoros
+				if (distancia != -1) {
+				  while (not adyacente_gringo(obj,p)) obj = path[obj.i][obj.j];
+					for (int k=0; k<8; ++k) {
+						if (p+Dir(k) == obj and not find_enemy(obj)) {
+              command(dni,Dir(k)); // envio al enano hacia el tesoro
+              redi = true;
             }
-    }
+					}
+				}
+			}
+      if (not redi and round() >= 120) {
+        somos_de_oro(p, obj, visit, path, dist, crash);
+        while (not adyacente_gringo(obj,p)) obj = path[obj.i][obj.j];
+        for (int k=0; k<8; ++k) {
+          if (p+Dir(k) == obj and not find_enemy(obj)) command(dni,Dir(k)); // envio al enano hacia el tesoro
+        }	
+      }
     }
   }
   
   void move_wizards() {
     vector<int> W = wizards(me());
     for (unsigned int i=0; i<W.size(); ++i) {
-        MI dist = MI(N,VI(N,0));  
-        MB visit = MB(N,VB(N,false));
-        MP path = MP(N,VP(N));
-        int dni = W[i];
-        Unit magisu = unit(dni);
-        Pos p = magisu.pos;
-        Pos obj;
-        if (enano_adyacente(p)) command(dni,None);
-        else {
-            int distancia = soraka(p,obj,visit,path,dist,crash);
-            if (distancia != -1) {
-                while (not adyacente_wizard(obj,p)) obj = path[obj.i][obj.j];
-                for (int k=0; k<4; ++k) {
-                    if (p+Dir(2*k) == obj){ command(dni,Dir(2*k)); cout << 2*k << endl;}// envio al enano hacia el tesoro
-                }
-            }
+      MI dist = MI(N,VI(N,0));  
+      MB visit = MB(N,VB(N,false));
+      MP path = MP(N,VP(N));
+      int dni = W[i];
+      Unit magisu = unit(dni);
+      Pos p = magisu.pos;
+      Pos obj;
+      if (enano_adyacente(p)) command(dni,None);
+      else {
+        int distancia = soraka(p,obj,visit,path,dist,crash);
+        if (distancia != -1) {
+          while (not adyacente_wizard(obj,p)) obj = path[obj.i][obj.j];
+          for (int k=0; k<4; ++k) {
+            if (p+Dir(2*k) == obj) command(dni,Dir(2*k));// envio al enano hacia el tesoro
+          }
         }
+      }
     }
   }
   
@@ -147,8 +172,8 @@ struct PLAYER_NAME : public Player {
     }
     return -1;
   }
-  
-  int bufar(Pos inicio, Pos& obj, MB& explorado, MP& path, MI& dist, MB& crash,bool gula) {
+
+  int bufar(Pos inicio, Pos& obj, MB& explorado, MP& path, MI& dist, MB& crash) {
     queue<Pos> cola;
     cola.push(inicio);
     while (not cola.empty()) {
@@ -157,12 +182,9 @@ struct PLAYER_NAME : public Player {
       int i = actu.i;
       int j = actu.j;
       explorado[i][j] = true; // marco la posicion visitada
-      if (not gula and cell(actu).owner != me() and cell(actu).id == -1 and cell(actu).type == Cave) { // si he encontrado un tesoro acabo
+      if (cell(actu).owner != me() and cell(actu).id == -1 and cell(actu).type == Cave and not crash[i][j]) { // si he encontrado una celda libre acabo
         obj = actu;
-        return dist[i][j];
-      }
-       if (gula and cell(actu).treasure) { // si he encontrado un tesoro acabo
-        obj = actu;
+				crash[i][j] = true;
         return dist[i][j];
       }
       for (int k=0; k<8; ++k) insert_adj(actu+Dir(k), cola, actu, explorado, path, dist, crash,false); // añado adyacentes
@@ -171,12 +193,12 @@ struct PLAYER_NAME : public Player {
   }
   
   bool enano_adyacente(Pos p) {
-      for (int k=0; k<4; ++k) {
-          if(pos_ok(p+Dir(2*k)) and cell(p+Dir(2*k)).id != -1){
-            if (unit(cell(p+Dir(2*k)).id).type == Dwarf and unit(cell(p+Dir(2*k)).id).player == me()) return true; // envio al enano hacia el tesoro
-            } 
-      }
-        return false;
+    for (int k=0; k<4; ++k) {
+      if(pos_ok(p+Dir(2*k)) and cell(p+Dir(2*k)).id != -1){
+        if (unit(cell(p+Dir(2*k)).id).type == Dwarf and unit(cell(p+Dir(2*k)).id).player == me()) return true; // envio al enano hacia el tesoro
+      } 
+    }
+    return false;
   }
   
   int soraka(Pos inicio, Pos& obj, MB& explorado, MP& path, MI& dist, MB& crash) {
@@ -197,6 +219,37 @@ struct PLAYER_NAME : public Player {
     return -1;
   }
   
+	void somos_de_oro(Pos inicio, Pos& obj, MB& explorado, MP& path, MI& dist, MB& crash) {
+    dist = MI(N,VI(N,1000));
+		priority_queue< pes_pos, vector<pes_pos>, greater<pes_pos> > cua;
+		cua.push({0,inicio});
+		dist[inicio.i][inicio.j] = 0;
+		while (not cua.empty()) {
+			Pos actu = cua.top().second;
+			cua.pop();
+      if (cell(actu).treasure) {
+        obj = actu;
+        return;
+      }
+      int pesaux;
+			if (not explorado[actu.i][actu.j]) {
+				explorado[actu.i][actu.j] = true;
+				for (int k=0; k<8; ++k) {
+					Pos auxpos = actu+Dir(k); // posicion adyacente
+          if (pos_ok(auxpos) and minable(auxpos)) {
+            if (cell(auxpos).type == Rock) pesaux = cell(auxpos).turns; // si es una piedra, la vida que le queda
+            else pesaux = 1; // si no es una piedra, 1
+            if(dist[auxpos.i][auxpos.j] > dist[actu.i][actu.j] + pesaux) {
+              path[auxpos.i][auxpos.j] = actu;
+              dist[auxpos.i][auxpos.j] = dist[actu.i][actu.j] + pesaux;
+              cua.push({dist[auxpos.i][auxpos.j], auxpos});
+            }
+          }
+				}
+			}
+		}
+	}
+
   void insert_adj(Pos pos, queue<Pos>& cola, Pos pre, MB& explorado, MP& path, MI& dist, MB& crash, bool pelea) {
     if(not pos_ok(pos)) return;
     int i = pos.i;
