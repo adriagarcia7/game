@@ -35,6 +35,7 @@ struct PLAYER_NAME : public Player {
   
   const int N = 60;
   MB crash = MB(N,VB(N,false));
+  VP curados = VP(0);
   
   bool find_enemy(Pos p) {
     if (cell(p).id != -1 and unit(cell(p).id).player != me()) return true;
@@ -73,10 +74,18 @@ struct PLAYER_NAME : public Player {
   
   void reset_mapa() {
     crash = MB(N,VB(N,false));
+    curados = VP(0);
   }
   
+  bool curado(Pos p) {
+    for (unsigned int k=0; k<curados.size(); ++k) {
+      if(curados[k] == p) return true;
+    }
+    return false;
+  }
+
   void move_dwarves() {
-    vector<int> D = dwarves(me());
+    VI D = dwarves(me());
     for (unsigned int i=0; i<D.size(); ++i) {
       MI dist = MI(N,VI(N,0));  
       MB visit = MB(N,VB(N,false));
@@ -86,7 +95,6 @@ struct PLAYER_NAME : public Player {
       Pos p = enano.pos;
       Pos obj;
       bool redi = false;
-
       for (int k=0; k<8; ++k) {
         if (pos_ok(p+Dir(k)) and cell(p+Dir(k)).id != -1 and unit(cell(p+Dir(k)).id).type == Wizard and unit(cell(p+Dir(k)).id).player != me()) {
           command(dni,Dir(k)); // envio al enano hacia el mago enemigo
@@ -109,7 +117,7 @@ struct PLAYER_NAME : public Player {
 					}
 				}
 			}
-			if (not redi and round() < 120) {
+			if (not redi and round() >= 100) {
 				int distancia;
 				distancia = bufar(p, obj, visit, path, dist, crash); // busco tesoros
 				if (distancia != -1) {
@@ -122,7 +130,7 @@ struct PLAYER_NAME : public Player {
 					}
 				}
 			}
-      if (not redi and round() >= 120) {
+      if (not redi and round() < 100) {
         somos_de_oro(p, obj, visit, path, dist, crash);
         while (not adyacente_gringo(obj,p)) obj = path[obj.i][obj.j];
         for (int k=0; k<8; ++k) {
@@ -133,7 +141,7 @@ struct PLAYER_NAME : public Player {
   }
   
   void move_wizards() {
-    vector<int> W = wizards(me());
+    VI W = wizards(me());
     for (unsigned int i=0; i<W.size(); ++i) {
       MI dist = MI(N,VI(N,0));  
       MB visit = MB(N,VB(N,false));
@@ -142,7 +150,10 @@ struct PLAYER_NAME : public Player {
       Unit magisu = unit(dni);
       Pos p = magisu.pos;
       Pos obj;
-      if (enano_adyacente(p)) command(dni,None);
+      if (enano_adyacente(p)) {
+        command(dni,None);
+        curados.push_back(p);
+      }
       else {
         int distancia = soraka(p,obj,visit,path,dist,crash);
         if (distancia != -1) {
@@ -210,7 +221,7 @@ struct PLAYER_NAME : public Player {
       int i = actu.i;
       int j = actu.j;
       explorado[i][j] = true; // marco la posicion visitada
-      if (cell(actu).id != -1 and unit(cell(actu).id).type == Dwarf and unit(cell(actu).id).player == me()) { // si he encontrado un tesoro acabo
+      if (cell(actu).id != -1 and unit(cell(actu).id).type == Dwarf and unit(cell(actu).id).player == me() and not curado(actu)) { // si he encontrado un tesoro acabo
         obj = actu;
         return dist[i][j];
       }
@@ -227,8 +238,9 @@ struct PLAYER_NAME : public Player {
 		while (not cua.empty()) {
 			Pos actu = cua.top().second;
 			cua.pop();
-      if (cell(actu).treasure) {
+      if (cell(actu).treasure and not crash[actu.i][actu.j]) {
         obj = actu;
+        crash[actu.i][actu.j] = true;
         return;
       }
       int pesaux;
